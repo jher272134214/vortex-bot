@@ -13,7 +13,7 @@ namespace VortexBot
     {
         private const ulong OWNER_ID = 1432638241177075827;
         private const string DATA_FILE = "vortex_data.json";
-        private const long NEW_PLAYER_BALANCE = 1000000;
+        private const long NEW_PLAYER_BALANCE = 100000;
         private const int COMMAND_COOLDOWN_SECONDS = 20;
 
         private DiscordSocketClient _client = null!;
