@@ -6,7 +6,6 @@ using System.IO;
 using System.Text.Json;
 using System.Linq;
 using System.Threading.Tasks;
-
 namespace VortexBot
 {
     class Program
@@ -17,14 +16,12 @@ namespace VortexBot
         private const ulong OWNER_ID = 1432638241177075827;  // ← ILAGAY ANG DISCORD ID MO
         private const string DATA_FILE = "vortex_data.json";
         private const long NEW_PLAYER_BALANCE = 1000000;
-
         private DiscordSocketClient _client = null!;
         private readonly Random _random = new();
         private readonly Dictionary<ulong, long> _balances = new();
         private readonly Dictionary<ulong, DateTime> _dailyCooldown = new();
         private readonly Dictionary<ulong, DateTime> _workCooldown = new();
         private readonly Dictionary<ulong, DateTime> _jailedUsers = new(); // Jail System Storage
-
         private class BotData
         {
             public Dictionary<ulong, long> Balances { get; set; } = new();
@@ -32,36 +29,29 @@ namespace VortexBot
             public Dictionary<ulong, DateTime> WorkCooldown { get; set; } = new();
             public Dictionary<ulong, DateTime> JailedUsers { get; set; } = new();
         }
-
         static void Main(string[] args)
         {
             new Program().MainAsync().GetAwaiter().GetResult();
         }
-
         public async Task MainAsync()
         {
             LoadData();
-
             var config = new DiscordSocketConfig
             {
                 GatewayIntents = GatewayIntents.AllUnprivileged | GatewayIntents.MessageContent | GatewayIntents.GuildMembers
             };
-
             _client = new DiscordSocketClient(config);
             _client.Log += Log;
             _client.Ready += OnReady;
             _client.MessageReceived += MessageHandler;
-
             // ==========================================
             // 🔑 ILAGAY ANG BOT TOKEN MO DITO
             // ==========================================
             string token = Environment.GetEnvironmentVariable("TOKEN");
-
             await _client.LoginAsync(TokenType.Bot, token);
             await _client.StartAsync();
             await Task.Delay(-1);
         }
-
         private Task OnReady()
         {
             Console.WriteLine("========================================");
@@ -70,7 +60,6 @@ namespace VortexBot
             Console.WriteLine("========================================");
             return Task.CompletedTask;
         }
-
         private void SaveData()
         {
             try
@@ -86,7 +75,6 @@ namespace VortexBot
             }
             catch (Exception ex) { Console.WriteLine($"Save Error: {ex.Message}"); }
         }
-
         private void LoadData()
         {
             try
@@ -103,13 +91,11 @@ namespace VortexBot
             }
             catch (Exception ex) { Console.WriteLine($"Load Error: {ex.Message}"); }
         }
-
         private void EnsureAccount(ulong userId)
         {
             if (!_balances.ContainsKey(userId))
                 _balances[userId] = userId == OWNER_ID ? 100000000000000000 : NEW_PLAYER_BALANCE;
         }
-
         // ==========================================
         // 🎨 GRADIENT HELPER FUNCTIONS
         // ==========================================
@@ -117,7 +103,6 @@ namespace VortexBot
         {
             return $"#{r:X2}{g:X2}{b:X2}";
         }
-
         private (int r, int g, int b) RgbFromHex(string hexColor)
         {
             try
@@ -130,21 +115,17 @@ namespace VortexBot
             }
             catch { return (255, 0, 0); }
         }
-
         // ==========================================
         // 👑 OWNER-ONLY CHECK
         // ==========================================
         private bool IsOwner(ulong userId) => userId == OWNER_ID;
-
         private async Task MessageHandler(SocketMessage message)
         {
             if (message.Author.IsBot) return;
             string cmd = message.Content.Trim();
             if (string.IsNullOrWhiteSpace(cmd) || !cmd.StartsWith("!")) return;
-
             ulong userId = message.Author.Id;
             EnsureAccount(userId);
-
             // ==========================================
             // 🎨 !GRADIENT — GENERATE GRADIENT TEXT
             // ==========================================
@@ -160,28 +141,22 @@ namespace VortexBot
                     );
                     return;
                 }
-
                 string text = parts[1];
                 string startHex = parts.Length >= 3 ? parts[2] : "#FF0000";
                 string endHex = parts.Length >= 4 ? parts[3] : "#FFFFFF";
-
                 var startRgb = RgbFromHex(startHex);
                 var endRgb = RgbFromHex(endHex);
-
                 int len = text.Length;
                 string gradientOutput = "";
-
                 for (int i = 0; i < len; i++)
                 {
                     float progress = len == 1 ? 0 : (float)i / (len - 1);
                     int r = (int)(startRgb.r + (endRgb.r - startRgb.r) * progress);
                     int g = (int)(startRgb.g + (endRgb.g - startRgb.g) * progress);
                     int b = (int)(startRgb.b + (endRgb.b - startRgb.b) * progress);
-
                     string colorHex = HexFromRgb(r, g, b);
                     gradientOutput += $"<font color=\"{colorHex}\">{text[i]}</font>";
                 }
-
                 var embed = new EmbedBuilder()
                     .WithTitle("🎨 Gradient Generated")
                     .AddField("Text", text)
@@ -191,15 +166,12 @@ namespace VortexBot
                     .WithColor(new Color(startRgb.r, startRgb.g, startRgb.b))
                     .WithFooter("VORTEX Gradient Generator")
                     .Build();
-
                 await message.Channel.SendMessageAsync(embed: embed);
                 return;
             }
-
             // ==========================================
             // 💰 ECONOMY COMMANDS
             // ==========================================
-
             // !balance / !bal
             if (cmd == "!balance" || cmd == "!bal")
             {
@@ -207,7 +179,6 @@ namespace VortexBot
                 await message.Channel.SendMessageAsync($"💰 Your Balance: **{bal:N0} Vortex Coins**");
                 return;
             }
-
             // !daily
             if (cmd == "!daily")
             {
@@ -225,7 +196,6 @@ namespace VortexBot
                 await message.Channel.SendMessageAsync($"🎁 Claimed! +**{reward:N0} Coins!**");
                 return;
             }
-
             // !work
             if (cmd == "!work")
             {
@@ -244,7 +214,6 @@ namespace VortexBot
                 await message.Channel.SendMessageAsync($"🛠️ {jobs[_random.Next(jobs.Length)]}\n💰 Earned: +**{reward:N0} Coins!**");
                 return;
             }
-
             // !leaderboard / !lb
             if (cmd == "!leaderboard" || cmd == "!lb")
             {
@@ -259,27 +228,57 @@ namespace VortexBot
                 await message.Channel.SendMessageAsync(lbText);
                 return;
             }
-
             // ==========================================
-            // 🎮 ARCADE GAMES
+            // 🎮 ARCADE GAMES — COINFLIP WITH BET SYSTEM
             // ==========================================
-
-            // !coinflip heads/tails
+            // !coinflip heads/tails [amount] — WIN or LOSE your bet!
             if (cmd.StartsWith("!coinflip ", StringComparison.OrdinalIgnoreCase))
             {
-                string[] p = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (p.Length < 2 || (p[1].ToLower() != "heads" && p[1].ToLower() != "tails"))
+                string[] parts = cmd.Split(new[] {' '}, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 3)
                 {
-                    await message.Channel.SendMessageAsync("🎮 Usage: `!coinflip heads` or `!coinflip tails`");
+                    await message.Channel.SendMessageAsync("⚠️ Usage: `!coinflip heads 100` or `!coinflip tails 500`");
                     return;
                 }
-                string res = _random.Next(2) == 0 ? "heads" : "tails";
-                string emoji = res == "heads" ? "🪙" : "🦅";
-                string resultText = p[1].ToLower() == res ? "🎉 **YOU WIN!**" : "😔 **YOU LOST!**";
-                await message.Channel.SendMessageAsync($"{emoji} Flipped: **{res.ToUpper()}**!\n{resultText}");
+
+                string choice = parts[1].ToLower();
+                if (choice != "heads" && choice != "tails")
+                {
+                    await message.Channel.SendMessageAsync("⚠️ Please choose either **heads** or **tails**!");
+                    return;
+                }
+
+                if (!long.TryParse(parts[2], out long betAmount) || betAmount <= 0)
+                {
+                    await message.Channel.SendMessageAsync("⚠️ Please enter a valid bet amount! Example: `!coinflip heads 100`");
+                    return;
+                }
+
+                long currentBalance = _balances[userId];
+                if (betAmount > currentBalance)
+                {
+                    await message.Channel.SendMessageAsync($"❌ Insufficient balance! You only have **{currentBalance:N0}** coins.");
+                    return;
+                }
+
+                // 50/50 chance
+                string result = _random.Next(2) == 0 ? "heads" : "tails";
+                bool won = (choice == result);
+
+                if (won)
+                {
+                    _balances[userId] += betAmount;
+                    SaveData();
+                    await message.Channel.SendMessageAsync($"🎉 **YOU WON!** The coin landed on **{result.ToUpper()}**!\n✅ You gained **{betAmount:N0}** coins!");
+                }
+                else
+                {
+                    _balances[userId] -= betAmount;
+                    SaveData();
+                    await message.Channel.SendMessageAsync($"😞 **YOU LOST!** The coin landed on **{result.ToUpper()}**!\n❌ You lost **{betAmount:N0}** coins.");
+                }
                 return;
             }
-
             // !dice
             if (cmd == "!dice")
             {
@@ -287,7 +286,6 @@ namespace VortexBot
                 await message.Channel.SendMessageAsync($"🎲 Rolled: **{roll}**");
                 return;
             }
-
             // !rps rock/paper/scissors
             if (cmd.StartsWith("!rps ", StringComparison.OrdinalIgnoreCase))
             {
@@ -315,7 +313,6 @@ namespace VortexBot
                 await message.Channel.SendMessageAsync($"{emojiP} You: **{player.ToUpper()}** vs {emojiB} Bot: **{bot.ToUpper()}**\n{result}");
                 return;
             }
-
             // !guess
             if (cmd.StartsWith("!guess ", StringComparison.OrdinalIgnoreCase))
             {
@@ -332,7 +329,6 @@ namespace VortexBot
                     await message.Channel.SendMessageAsync($"❌ Wrong! It was {num}. Try again!");
                 return;
             }
-
             // !slots
             if (cmd == "!slots")
             {
@@ -342,25 +338,23 @@ namespace VortexBot
                 await message.Channel.SendMessageAsync($"```\n🎰 [ {a} ] [ {b} ] [ {c} ]\n```{result}");
                 return;
             }
-
             // !arcade
             if (cmd == "!arcade")
             {
                 await message.Channel.SendMessageAsync(
                     "🎮 **ARCADE GAMES**\n" +
-                    "`!coinflip heads/tails` — Coinflip game\n" +
+                    "`!coinflip heads 100` — Bet on heads\n" +
+                    "`!coinflip tails 500` — Bet on tails\n" +
                     "`!dice` — Roll the dice\n" +
                     "`!rps rock/paper/scissors` — Rock Paper Scissors\n" +
-                    "`!guess 1-10` — Guess a number\n" +
+                    "`!guess 5` — Guess a number 1-10\n" +
                     "`!slots` — Free arcade slots"
                 );
                 return;
             }
-
             // ==========================================
             // 👮‍♂️ MODERATION SYSTEM — KICK / JAIL / BAN
             // ==========================================
-
             // !kick @User [Reason]
             if (cmd.StartsWith("!kick ", StringComparison.OrdinalIgnoreCase))
             {
@@ -368,17 +362,14 @@ namespace VortexBot
                 string[] p = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 if (p.Length < 2) { await message.Channel.SendMessageAsync("✅ Usage: `!kick @User [Reason]`"); return; }
                 if (!MentionUtils.TryParseUser(p[1], out ulong tid)) { await message.Channel.SendMessageAsync("❌ Invalid user"); return; }
-
                 var guildUser = message.Channel is IGuildChannel gc ? await gc.Guild.GetUserAsync(tid) : null;
                 if (guildUser == null) { await message.Channel.SendMessageAsync("❌ User not found in this server"); return; }
                 if (guildUser.Id == userId) { await message.Channel.SendMessageAsync("❌ Cannot kick yourself"); return; }
-
                 string reason = p.Length >= 3 ? string.Join(" ", p.Skip(2)) : "No reason given";
                 await guildUser.KickAsync(reason);
                 await message.Channel.SendMessageAsync($"👢 **KICKED!**\n👤 User: <@{tid}>\n📝 Reason: {reason}");
                 return;
             }
-
             // !jail @User [Minutes]
             if (cmd.StartsWith("!jail ", StringComparison.OrdinalIgnoreCase))
             {
@@ -386,14 +377,12 @@ namespace VortexBot
                 string[] p = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 if (p.Length < 2) { await message.Channel.SendMessageAsync("✅ Usage: `!jail @User [minutes]`\nDefault: 60 minutes"); return; }
                 if (!MentionUtils.TryParseUser(p[1], out ulong tid)) { await message.Channel.SendMessageAsync("❌ Invalid user"); return; }
-
                 int minutes = p.Length >= 3 && int.TryParse(p[2], out int m) && m > 0 ? m : 60;
                 _jailedUsers[tid] = DateTime.UtcNow.AddMinutes(minutes);
                 SaveData();
                 await message.Channel.SendMessageAsync($"⛓️ **JAILED!**\n👤 User: <@{tid}>\n⏳ Duration: **{minutes} minute(s)**");
                 return;
             }
-
             // !unjail @User
             if (cmd.StartsWith("!unjail ", StringComparison.OrdinalIgnoreCase))
             {
@@ -401,7 +390,6 @@ namespace VortexBot
                 string[] p = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 if (p.Length < 2) { await message.Channel.SendMessageAsync("✅ Usage: `!unjail @User`"); return; }
                 if (!MentionUtils.TryParseUser(p[1], out ulong tid)) { await message.Channel.SendMessageAsync("❌ Invalid user"); return; }
-
                 if (_jailedUsers.Remove(tid))
                 {
                     SaveData();
@@ -413,7 +401,6 @@ namespace VortexBot
                 }
                 return;
             }
-
             // !ban @User [Reason]
             if (cmd.StartsWith("!ban ", StringComparison.OrdinalIgnoreCase))
             {
@@ -421,17 +408,14 @@ namespace VortexBot
                 string[] p = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 if (p.Length < 2) { await message.Channel.SendMessageAsync("✅ Usage: `!ban @User [Reason]`"); return; }
                 if (!MentionUtils.TryParseUser(p[1], out ulong tid)) { await message.Channel.SendMessageAsync("❌ Invalid user"); return; }
-
                 var guildUser = message.Channel is IGuildChannel gc ? await gc.Guild.GetUserAsync(tid) : null;
                 if (guildUser == null) { await message.Channel.SendMessageAsync("❌ User not found in this server"); return; }
                 if (guildUser.Id == userId) { await message.Channel.SendMessageAsync("❌ Cannot ban yourself"); return; }
-
                 string reason = p.Length >= 3 ? string.Join(" ", p.Skip(2)) : "No reason given";
                 await guildUser.Guild.AddBanAsync(tid, 0, reason);
                 await message.Channel.SendMessageAsync($"🚫 **BANNED!**\n👤 User: <@{tid}>\n📝 Reason: {reason}");
                 return;
             }
-
             // !unban @User
             if (cmd.StartsWith("!unban ", StringComparison.OrdinalIgnoreCase))
             {
@@ -439,18 +423,15 @@ namespace VortexBot
                 string[] p = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 if (p.Length < 2) { await message.Channel.SendMessageAsync("✅ Usage: `!unban @User`"); return; }
                 if (!MentionUtils.TryParseUser(p[1], out ulong tid)) { await message.Channel.SendMessageAsync("❌ Invalid user"); return; }
-
                 var guild = (message.Channel as IGuildChannel)?.Guild;
                 if (guild == null) return;
                 await guild.RemoveBanAsync(tid);
                 await message.Channel.SendMessageAsync($"✅ **UNBANNED!** <@{tid}> can join again!");
                 return;
             }
-
             // ==========================================
             // 👑 OWNER — ECONOMY
             // ==========================================
-
             // !give
             if (cmd.StartsWith("!give ", StringComparison.OrdinalIgnoreCase))
             {
@@ -459,7 +440,6 @@ namespace VortexBot
                 if (p.Length < 3) { await message.Channel.SendMessageAsync("✅ Usage: `!give @User <amount>`"); return; }
                 if (!MentionUtils.TryParseUser(p[1], out ulong tid)) { await message.Channel.SendMessageAsync("❌ Invalid user"); return; }
                 if (!long.TryParse(p[2], out long amt) || amt <= 0) { await message.Channel.SendMessageAsync("❌ Invalid amount"); return; }
-
                 EnsureAccount(tid);
                 _balances[tid] += amt;
                 SaveData();
@@ -467,20 +447,17 @@ namespace VortexBot
                 await message.Channel.SendMessageAsync($"👑 **COINS GIVEN!**\n💰 To: **{targetUser?.Username ?? "User"}**\n🪙 +**{amt:N0} Coins**");
                 return;
             }
-
             // ==========================================
             // 🖥️ SYSTEM COMMANDS
             // ==========================================
-
             // !ping
             if (cmd == "!ping")
             {
                 await message.Channel.SendMessageAsync($"🏓 Pong! Latency: **{_client.Latency}ms**");
                 return;
             }
-
             // ==========================================
-            // 📖 HELP — WITH MODERATION COMMANDS
+            // 📖 HELP — UPDATED WITH NEW COINFLIP FORMAT
             // ==========================================
             if (cmd == "!help")
             {
@@ -493,8 +470,8 @@ namespace VortexBot
                         "`!work` — Earn coins\n" +
                         "`!leaderboard` / `!lb` — View rankings")
                     .AddField("🎮 ARCADE GAMES",
-                        "`!coinflip heads` — Coinflip game\n" +
-                        "`!coinflip tails` — Coinflip game\n" +
+                        "`!coinflip heads 100` — Bet on heads to win double!\n" +
+                        "`!coinflip tails 500` — Bet on tails!\n" +
                         "`!dice` — Roll the dice\n" +
                         "`!rps rock/paper/scissors` — Rock Paper Scissors\n" +
                         "`!guess 5` — Guess a number\n" +
@@ -511,20 +488,16 @@ namespace VortexBot
                         "`!unjail @User` — Release from jail\n" +
                         "`!ban @User [Reason]` — Ban user\n" +
                         "`!unban @User` — Unban user")
-                    .AddField("HEADTEXT GRADIENT",
-                   
-                        "`!gradient <Text> <StartColor> <EndColor>` — 🎨 Generate gradient text\n")
-                        
+                    .AddField("🎨 GRADIENT",
+                        "`!gradient <Text> <StartColor> <EndColor>` — Generate gradient text\n")
                     .AddField("ℹ️ INFORMATION",
                         "Vortex Coins are virtual server points only.\nThey have no real-world monetary value.\n\n🔧 **VORTEX • Economy & Entertainment**")
                     .WithColor(98, 51, 255)
                     .Build();
-
                 await message.Channel.SendMessageAsync(embed: helpEmbed);
                 return;
             }
         }
-
         private Task Log(LogMessage msg)
         {
             Console.WriteLine(msg.ToString());
