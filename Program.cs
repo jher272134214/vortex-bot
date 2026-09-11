@@ -194,6 +194,8 @@ namespace VortexBot
                 return;
             }
 
+            // === ECONOMY COMMANDS ===
+
             if (cmdName == "!balance" || cmdName == "!bal")
             {
                 await msg.Channel.SendMessageAsync($"💰 <@{userId}> Balance: **{_balances[userId]:N0} Coins**");
@@ -248,6 +250,8 @@ namespace VortexBot
                 return;
             }
 
+            // === ARCADE GAMES ===
+
             if (cmdName == "!slots")
             {
                 long bet = args.Length >= 2 && long.TryParse(args[1], out long b) && b > 0 ? b : 0;
@@ -267,7 +271,6 @@ namespace VortexBot
                 // ✅ 40% TALO | 40% PANALO | 15% ⭐5x | 5% 💎50x
                 if (roll < 0.40)
                 {
-                    // ❌ 40% CHANCE: TALO — WALANG KAPAREHAS
                     string[] loseSymbols = { "🍒", "🍋", "🍇", "7️⃣" };
                     do
                     {
@@ -278,18 +281,15 @@ namespace VortexBot
                 }
                 else if (roll < 0.80)
                 {
-                    // ✅ 40% CHANCE: PANALO — TRIPLE COMMON
                     int idx = new Random().Next(common.Length);
                     a = common[idx]; symB = common[idx]; c = common[idx];
                 }
                 else if (roll < 0.95)
                 {
-                    // ⭐ 15% CHANCE: TRIPLE STAR
                     a = star; symB = star; c = star;
                 }
                 else
                 {
-                    // 💎 5% CHANCE: TRIPLE DIAMOND
                     a = diamond; symB = diamond; c = diamond;
                 }
 
@@ -319,6 +319,102 @@ namespace VortexBot
                 return;
             }
 
+            if (cmdName == "!coinflip" || cmdName == "!cf")
+            {
+                long betAmt = args.Length >= 2 && long.TryParse(args[1], out long amt) && amt > 0 ? amt : 100;
+                if (betAmt > _balances[userId])
+                {
+                    await msg.Channel.SendMessageAsync("❌ Kulang ang pera mo!");
+                    return;
+                }
+
+                string[] choices = { "Heads", "Tails" };
+                string result = choices[new Random().Next(choices.Length)];
+                string userChoice = args.Length >= 3 ? args[2].ToLower() : "";
+
+                bool win = (userChoice == "heads" && result == "Heads") || (userChoice == "tails" && result == "Tails");
+
+                if (win)
+                {
+                    long winTotal = betAmt * 2;
+                    _balances[userId] += betAmt;
+                    SaveData();
+                    await msg.Channel.SendMessageAsync($"🪙 **{result}! PANALO!** +**{betAmt:N0} Coins**! Balanse: **{_balances[userId]:N0}**");
+                }
+                else
+                {
+                    _balances[userId] -= betAmt;
+                    SaveData();
+                    await msg.Channel.SendMessageAsync($"🪙 **{result}! TALO!** -**{betAmt:N0} Coins**! Balanse: **{_balances[userId]:N0}**");
+                }
+                return;
+            }
+
+            if (cmdName == "!dice")
+            {
+                long betAmt = args.Length >= 2 && long.TryParse(args[1], out long diceBet) && diceBet > 0 ? diceBet : 100;
+                if (betAmt > _balances[userId])
+                {
+                    await msg.Channel.SendMessageAsync("❌ Kulang ang pera mo!");
+                    return;
+                }
+
+                int diceResult = new Random().Next(1, 7);
+                int guess = args.Length >= 3 && int.TryParse(args[2], out int g) && g >= 1 && g <= 6 ? g : 0;
+
+                if (guess == diceResult)
+                {
+                    long winTotal = betAmt * 6;
+                    _balances[userId] += betAmt * 5;
+                    SaveData();
+                    await msg.Channel.SendMessageAsync($"🎲 **{diceResult}! TAMA!** +**{betAmt * 5:N0} Coins**! Balanse: **{_balances[userId]:N0}**");
+                }
+                else
+                {
+                    _balances[userId] -= betAmt;
+                    SaveData();
+                    await msg.Channel.SendMessageAsync($"🎲 **{diceResult}! MALI!** -**{betAmt:N0} Coins**! Balanse: **{_balances[userId]:N0}**");
+                }
+                return;
+            }
+
+            if (cmdName == "!rps")
+            {
+                string[] rpsChoices = { "rock", "paper", "scissors" };
+                string emojiChoice = args.Length >= 2 ? args[1].ToLower() : "";
+                if (!rpsChoices.Contains(emojiChoice))
+                {
+                    await msg.Channel.SendMessageAsync("❌ Gamitin: `!rps [rock/paper/scissors]`");
+                    return;
+                }
+
+                string botChoice = rpsChoices[new Random().Next(rpsChoices.Length)];
+                string emojiUser = emojiChoice == "rock" ? "🪨" : emojiChoice == "paper" ? "📄" : "✂️";
+                string emojiBot = botChoice == "rock" ? "🪨" : botChoice == "paper" ? "📄" : "✂️";
+
+                string resultText;
+                if (emojiChoice == botChoice)
+                    resultText = $"🤝 PANTAY! Parehong **{emojiUser}**!";
+                else if ((emojiChoice == "rock" && botChoice == "scissors") ||
+                         (emojiChoice == "paper" && botChoice == "rock") ||
+                         (emojiChoice == "scissors" && botChoice == "paper"))
+                    resultText = $"🎉 **PANALO!** Ikaw: {emojiUser} vs Ako: {emojiBot}";
+                else
+                    resultText = $"😔 **TALO!** Ikaw: {emojiUser} vs Ako: {emojiBot}";
+
+                await msg.Channel.SendMessageAsync(resultText);
+                return;
+            }
+
+            if (cmdName == "!guess")
+            {
+                int target = new Random().Next(1, 101);
+                await msg.Channel.SendMessageAsync($"🔢 **NAGIISIP AKO NG NUMERO 1-100... HULAAN MO!** (Sagutin mo gamit ang numero)");
+                return;
+            }
+
+            // === OWNER / MODERATION ===
+
             if (IsOwner(userId))
             {
                 if (cmdName == "!give" && args.Length >= 3 && ulong.TryParse(args[1].Replace("<@!", "").Replace(">", "").Replace("!", ""), out ulong targetId) && long.TryParse(args[2], out long giveAmt))
@@ -338,17 +434,40 @@ namespace VortexBot
                 }
             }
 
+            // === HELP COMMAND ===
+
             if (cmdName == "!help")
             {
                 await msg.Channel.SendMessageAsync(@"
-🏠 **VORTEX BOT COMMANDS**
-💰 `!bal / !balance` — Tingnan ang balanse
-🎁 `!daily` — Kunin ang pang-araw-araw na premyo
-🛠️ `!work` — Magtrabaho at kumita
-🎰 `!slots [halaga]` — Subukan ang suwerte
-🏆 `!lb / !leaderboard` — Tingnan ang mayayaman
-⏳ Lahat ng command: 20 segundong paghihintay
-🎰 Slots: ❌40% Talo | ✅40% Panalo | ⭐15% 5x | 💎5% 50x
+🏆 **VORTEX BOT**
+Welcome to VORTEX — Economy & Arcade Bot!
+Earn virtual Vortex Coins through free games and activities!
+
+💰 **ECONOMY**
+`!balance / !bal` — Tingnan ang balanse
+`!daily` — Kunin ang pang-araw-araw na premyo
+`!work` — Magtrabaho at kumita
+`!leaderboard / !lb` — Tingnan ang mayayaman
+
+🎮 **ARCADE GAMES**
+`!coinflip [halaga] heads/tails` — Taya sa Heads o Tails
+`!dice [halaga] 1-6` — Taya sa numero ng dice
+`!rps rock/paper/scissors` — Labanan ang Bot
+`!guess` — Hulaan ang numero
+`!slots [halaga]` — Subukan ang suwerte sa Slots
+
+🎰 **Slots Chance:**
+❌ 40% — Talo
+✅ 40% — Panalo (2x)
+⭐ 15% — Triple Star (5x)
+💎  5% — Triple Diamond (50x)
+
+👑 **OWNER COMMANDS:**
+`!give @user [halaga]` — Magbigay ng Coins
+
+ℹ️ **INFORMATION**
+Vortex Coins are virtual server points only.
+They have no real-world monetary value.
 ");
                 return;
             }
