@@ -14,6 +14,7 @@ namespace VortexBot
         private const ulong OWNER_ID = 1432638241177075827;
         private const string DATA_FILE = "vortex_data.json";
         private const long NEW_PLAYER_BALANCE = 1000000;
+        private const int COMMAND_COOLDOWN_SECONDS = 20; // ⏳ 20 SECOND COOLDOWN
 
         private DiscordSocketClient _client = null!;
         private readonly Random _random = new();
@@ -21,6 +22,7 @@ namespace VortexBot
         private readonly Dictionary<ulong, DateTime> _dailyCooldown = new();
         private readonly Dictionary<ulong, DateTime> _workCooldown = new();
         private readonly Dictionary<ulong, DateTime> _jailedUsers = new();
+        private readonly Dictionary<ulong, DateTime> _userCooldown = new(); // ⏳ COOLDOWN STORAGE
 
         private class BotData
         {
@@ -122,6 +124,20 @@ namespace VortexBot
 
         private bool IsOwner(ulong userId) => userId == OWNER_ID;
 
+        // ⏳ CHECK COOLDOWN — RETURN TRUE IF CAN USE
+        private bool CheckCooldown(ulong userId, out TimeSpan remaining)
+        {
+            remaining = TimeSpan.Zero;
+            if (IsOwner(userId)) return true; // OWNER WALANG COOLDOWN!
+            if (_userCooldown.TryGetValue(userId, out var last))
+            {
+                remaining = DateTime.UtcNow.AddSeconds(COMMAND_COOLDOWN_SECONDS) - DateTime.UtcNow;
+                if (remaining.TotalSeconds > 0) return false;
+            }
+            _userCooldown[userId] = DateTime.UtcNow;
+            return true;
+        }
+
         private async Task MessageHandler(SocketMessage message)
         {
             if (message.Author.IsBot) return;
@@ -129,6 +145,13 @@ namespace VortexBot
             if (string.IsNullOrWhiteSpace(cmd) || !cmd.StartsWith("!")) return;
             ulong userId = message.Author.Id;
             EnsureAccount(userId);
+
+            // ⏳ CHECK 20s COOLDOWN SA LAHAT NG COMMANDS
+            if (!CheckCooldown(userId, out TimeSpan rem))
+            {
+                await message.Channel.SendMessageAsync($"⏳ **Cooldown!** Maghintay ng **{rem.Seconds} segundo** bago makagamit ulit!");
+                return;
+            }
 
             if (cmd.StartsWith("!gradient ", StringComparison.OrdinalIgnoreCase))
             {
@@ -320,7 +343,7 @@ namespace VortexBot
             }
 
             // ==========================================
-            // 🎰 SLOTS — PINADALI NA ANG 2x! MAS MADALI MANALO!
+            // 🎰 SLOTS — SOBRANG DALI NA MANALO!
             // ==========================================
             if (cmd.StartsWith("!slots", StringComparison.OrdinalIgnoreCase))
             {
@@ -340,29 +363,29 @@ namespace VortexBot
                     }
                 }
 
-                // ✅ MAS MARAMING CHANCE SA KARANIWANG SIMBOLO = MAS MADALI ANG 2x!
-                string[] common = { "🍒", "🍒", "🍒", "🍋", "🍋", "🍋", "🍇", "🍇", "7️⃣", "7️⃣" };
+                // ✅✅✅ SOBRANG DALI NA! 85% CHANCE GAMITIN ANG MADALING SIMBOLO!
+                string[] common = { "🍒", "🍒", "🍒", "🍒", "🍋", "🍋", "🍋", "🍋", "🍇", "🍇", "7️⃣", "7️⃣" };
                 string rare5x = "⭐";
                 string jackpot50x = "💎";
 
                 string a, b, c;
 
-                // 70% = GAMITIN LANG ANG MGA KARANIWAN — MAS MADALI MA-TATLO!
-                if (_random.NextDouble() < 0.70)
+                // ✅ 85% = PURE COMMON — SOBRANG DALI MA-TATLO PAREHAS!
+                if (_random.NextDouble() < 0.85)
                 {
                     a = common[_random.Next(common.Length)];
                     b = common[_random.Next(common.Length)];
                     c = common[_random.Next(common.Length)];
                 }
-                // 20% = MAY STAR NA PWDE LUMABAS
-                else if (_random.NextDouble() < 0.90)
+                // ⭐ 12% = MAY STAR
+                else if (_random.NextDouble() < 0.97)
                 {
                     string[] mixed = { "🍒", "🍋", "🍇", "7️⃣", rare5x };
                     a = mixed[_random.Next(mixed.Length)];
                     b = mixed[_random.Next(mixed.Length)];
                     c = mixed[_random.Next(mixed.Length)];
                 }
-                // 10% = MAY DIAMOND — SOBRA ANG BIHIRA
+                // 💎 3% = DIAMOND — SOBRA ANG BIHIRA!
                 else
                 {
                     string[] mixed = { "🍒", "🍋", "🍇", "7️⃣", rare5x, jackpot50x };
@@ -441,7 +464,8 @@ namespace VortexBot
                     "`!guess 5` — Guess a number 1-10\n" +
                     "`!slots` — Free slots\n" +
                     "`!slots 100` — Bet 100 coins\n" +
-                    "💎 3x Diamond = 50x | ⭐ 3x Star = 5x | Others 3x = 2x (EASIER!)"
+                    "💎 3x Diamond = 50x | ⭐ 3x Star = 5x | Others 3x = 2x ✅ SO EASY!\n" +
+                    "⏳ All commands: 20s cooldown"
                 );
                 return;
             }
@@ -577,12 +601,15 @@ namespace VortexBot
                         "`!guess 5` — Guess a number\n" +
                         "`!slots` — Free slots\n" +
                         "`!slots 100` — Bet coins on slots")
-                    .AddField("🎰 SLOTS PRIZES (EASIER NOW!)",
-                        "`3x 🍒🍋🍇7️⃣` = **2x** your bet ✅ EASIER!\n" +
+                    .AddField("🎰 SLOTS PRIZES (SO EASY NOW!)",
+                        "`3x 🍒🍋🍇7️⃣` = **2x** your bet ✅ 85% CHANCE!\n" +
                         "`3x ⭐⭐⭐` = **5x** your bet ⭐\n" +
-                        "`3x 💎💎💎` = **50x** your bet 💎 RARE!\n" +
+                        "`3x 💎💎💎` = **50x** your bet 💎 SUPER RARE!\n" +
                         "`2 match` = **Return bet**\n" +
                         "`No match` = **Lose bet**")
+                    .AddField("⏳ COOLDOWN",
+                        "**20 seconds** between commands for all players!\n" +
+                        "👑 **Owner has NO cooldown!**")
                     .AddField("👑 OWNER COMMANDS",
                         "`!give @User <amount>` — Give coins\n" +
                         "`!giveall <amount>` — Give coins to ALL\n" +
