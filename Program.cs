@@ -55,7 +55,7 @@ namespace VortexBot
             // ==========================================
             // 🔑 ILAGAY ANG BOT TOKEN MO DITO
             // ==========================================
-            string token = "MTU0NTEzNzYxNzMwMDEwMzE5OA.GKyfPq.S2dHjLnXb_KOA0WhtMTWSGj44zEchIPUi5cMkk"; // ← PALITAN NG TOKEN MO!
+            string token = Environment.GetEnvironmentVariable("TOKEN");
 
             await _client.LoginAsync(TokenType.Bot, token);
             await _client.StartAsync();
