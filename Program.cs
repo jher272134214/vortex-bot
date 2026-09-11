@@ -1,7 +1,5 @@
 using Discord;
 using Discord.WebSocket;
-using Discord.Commands;
-using Microsoft.Extensions.DependencyInjection;
 using Discord.Net;
 using System;
 using System.Threading.Tasks;
@@ -10,15 +8,12 @@ using System.IO;
 using System.Text.Json;
 using System.Linq;
 using System.Net;
-using System.Net.Http;
 
 namespace VortexBot
 {
     class Program
     {
         private DiscordSocketClient _client;
-        private CommandService _commands;
-        private IServiceProvider _services;
 
         private const ulong OWNER_ID = 1432638241177075827;
         private const string DATA_FILE = "vortex_data.json";
@@ -48,12 +43,6 @@ namespace VortexBot
             };
 
             _client = new DiscordSocketClient(config);
-            _commands = new CommandService();
-
-            _services = new ServiceCollection()
-                .AddSingleton(_client)
-                .AddSingleton(_commands)
-                .BuildServiceProvider();
 
             string token = Environment.GetEnvironmentVariable("DISCORD_TOKEN");
             if (string.IsNullOrWhiteSpace(token))
@@ -196,7 +185,6 @@ namespace VortexBot
             if (_jailedUntil.TryGetValue(userId, out var releaseTime) && DateTime.UtcNow < releaseTime)
                 return;
 
-            string cmd = userMsg.Content.Trim().ToLower();
             string[] args = userMsg.Content.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             string cmdName = args.Length > 0 ? args[0].ToLower() : "";
 
@@ -369,9 +357,9 @@ namespace VortexBot
 
     public class BotData
     {
-        public Dictionary<ulong, long> Balances { get; set; }
-        public Dictionary<ulong, DateTime> DailyCooldown { get; set; }
-        public Dictionary<ulong, DateTime> WorkCooldown { get; set; }
-        public Dictionary<ulong, DateTime> JailedUntil { get; set; }
+        public Dictionary<ulong, long> Balances { get; set; } = new();
+        public Dictionary<ulong, DateTime> DailyCooldown { get; set; } = new();
+        public Dictionary<ulong, DateTime> WorkCooldown { get; set; } = new();
+        public Dictionary<ulong, DateTime> JailedUntil { get; set; } = new();
     }
 }
