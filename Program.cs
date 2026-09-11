@@ -320,7 +320,7 @@ namespace VortexBot
             }
 
             // ==========================================
-            // 🎰 SLOTS — MAY TAYA AT MULTIPLIER NA!
+            // 🎰 SLOTS — PINADALI NA ANG 2x! MAS MADALI MANALO!
             // ==========================================
             if (cmd.StartsWith("!slots", StringComparison.OrdinalIgnoreCase))
             {
@@ -328,7 +328,6 @@ namespace VortexBot
                 long betAmount = 0;
                 bool hasBet = false;
 
-                // May taya ba? !slots 100
                 if (p.Length >= 2 && long.TryParse(p[1], out long amt) && amt > 0)
                 {
                     betAmount = amt;
@@ -341,50 +340,72 @@ namespace VortexBot
                     }
                 }
 
-                string[] sym = { "🍒", "🍋", "🍇", "⭐", "💎", "7️⃣" };
-                string a = sym[_random.Next(sym.Length)];
-                string b = sym[_random.Next(sym.Length)];
-                string c = sym[_random.Next(sym.Length)];
+                // ✅ MAS MARAMING CHANCE SA KARANIWANG SIMBOLO = MAS MADALI ANG 2x!
+                string[] common = { "🍒", "🍒", "🍒", "🍋", "🍋", "🍋", "🍇", "🍇", "7️⃣", "7️⃣" };
+                string rare5x = "⭐";
+                string jackpot50x = "💎";
+
+                string a, b, c;
+
+                // 70% = GAMITIN LANG ANG MGA KARANIWAN — MAS MADALI MA-TATLO!
+                if (_random.NextDouble() < 0.70)
+                {
+                    a = common[_random.Next(common.Length)];
+                    b = common[_random.Next(common.Length)];
+                    c = common[_random.Next(common.Length)];
+                }
+                // 20% = MAY STAR NA PWDE LUMABAS
+                else if (_random.NextDouble() < 0.90)
+                {
+                    string[] mixed = { "🍒", "🍋", "🍇", "7️⃣", rare5x };
+                    a = mixed[_random.Next(mixed.Length)];
+                    b = mixed[_random.Next(mixed.Length)];
+                    c = mixed[_random.Next(mixed.Length)];
+                }
+                // 10% = MAY DIAMOND — SOBRA ANG BIHIRA
+                else
+                {
+                    string[] mixed = { "🍒", "🍋", "🍇", "7️⃣", rare5x, jackpot50x };
+                    a = mixed[_random.Next(mixed.Length)];
+                    b = mixed[_random.Next(mixed.Length)];
+                    c = mixed[_random.Next(mixed.Length)];
+                }
 
                 string resultText;
                 long winMultiplier = 0;
 
-                // 3 parehas = JACKPOT
+                // 3 PAREHAS = PANALO!
                 if (a == b && b == c)
                 {
-                    // 💎💎💎 = 50x — SOBRANG BIHIRA! (2% chance)
-                    if (a == "💎")
+                    if (a == jackpot50x)
                     {
                         winMultiplier = 50;
                         resultText = "💎💎💎 **MEGA JACKPOT! 50x YOUR BET!** 💎💎💎";
                     }
-                    // ⭐⭐⭐ = 5x
-                    else if (a == "⭐")
+                    else if (a == rare5x)
                     {
                         winMultiplier = 5;
                         resultText = "⭐⭐⭐ **BIG WIN! 5x YOUR BET!** ⭐⭐⭐";
                     }
-                    // Iba = 2x
                     else
                     {
                         winMultiplier = 2;
-                        resultText = $"🎉 **JACKPOT! {winMultiplier}x YOUR BET!** 🎉";
+                        resultText = $"🎉 **JACKPOT! 2x YOUR BET!** 🎉";
                     }
                 }
-                // 2 parehas = 1.5x
+                // 2 PAREHAS = BALIK TAYA
                 else if (a == b || b == c || a == c)
                 {
-                    winMultiplier = 1; // Balik lang ang taya
+                    winMultiplier = 1;
                     resultText = "✨ **2 MATCH! COINS RETURNED!** ✨";
                 }
-                // Wala = TALO
+                // WALA = TALO
                 else
                 {
                     winMultiplier = 0;
                     resultText = "😔 **NO MATCH! BET LOST!** 😔";
                 }
 
-                // Kung may taya
                 if (hasBet)
                 {
                     long winnings = (long)(betAmount * winMultiplier);
@@ -419,8 +440,8 @@ namespace VortexBot
                     "`!rps rock/paper/scissors` — Rock Paper Scissors\n" +
                     "`!guess 5` — Guess a number 1-10\n" +
                     "`!slots` — Free slots\n" +
-                    "`!slots 100` — Bet 100 coins on slots\n" +
-                    "💎 3x Diamond = 50x | ⭐ 3x Star = 5x | 3x Others = 2x"
+                    "`!slots 100` — Bet 100 coins\n" +
+                    "💎 3x Diamond = 50x | ⭐ 3x Star = 5x | Others 3x = 2x (EASIER!)"
                 );
                 return;
             }
@@ -444,12 +465,12 @@ namespace VortexBot
             {
                 if (!IsOwner(userId)) { await message.Channel.SendMessageAsync("❌ **FORBIDDEN** — Owner only!"); return; }
                 string[] p = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (p.Length < 2) { await message.Channel.SendMessageAsync("✅ Usage: `!jail @User [minutes]`\nDefault: 60 minutes"); return; }
+                if (p.Length < 2) { await message.Channel.SendMessageAsync("✅ Usage: `!jail @User [minutes]`\nDefault: 60 min"); return; }
                 if (!MentionUtils.TryParseUser(p[1], out ulong tid)) { await message.Channel.SendMessageAsync("❌ Invalid user"); return; }
                 int minutes = p.Length >= 3 && int.TryParse(p[2], out int m) && m > 0 ? m : 60;
                 _jailedUsers[tid] = DateTime.UtcNow.AddMinutes(minutes);
                 SaveData();
-                await message.Channel.SendMessageAsync($"⛓️ **JAILED!**\n👤 User: <@{tid}>\n⏳ Duration: **{minutes} minute(s)**");
+                await message.Channel.SendMessageAsync($"⛓️ **JAILED!**\n👤 User: <@{tid}>\n⏳ {minutes} min");
                 return;
             }
 
@@ -556,24 +577,24 @@ namespace VortexBot
                         "`!guess 5` — Guess a number\n" +
                         "`!slots` — Free slots\n" +
                         "`!slots 100` — Bet coins on slots")
-                    .AddField("🎰 SLOTS PRIZES",
-                        "`3x 🍒🍋🍇` = **2x** your bet\n" +
-                        "`3x ⭐⭐⭐` = **5x** your bet\n" +
-                        "`3x 💎💎💎` = **50x** your bet (RARE!)\n" +
+                    .AddField("🎰 SLOTS PRIZES (EASIER NOW!)",
+                        "`3x 🍒🍋🍇7️⃣` = **2x** your bet ✅ EASIER!\n" +
+                        "`3x ⭐⭐⭐` = **5x** your bet ⭐\n" +
+                        "`3x 💎💎💎` = **50x** your bet 💎 RARE!\n" +
                         "`2 match` = **Return bet**\n" +
                         "`No match` = **Lose bet**")
                     .AddField("👑 OWNER COMMANDS",
-                        "`!give @User <amount>` — Give coins to a player\n" +
-                        "`!giveall <amount>` — Give coins to ALL players\n" +
+                        "`!give @User <amount>` — Give coins\n" +
+                        "`!giveall <amount>` — Give coins to ALL\n" +
                         "`!kick @User [Reason]` — Kick user\n" +
-                        "`!jail @User [minutes]` — Jail user\n" +
-                        "`!unjail @User` — Release from jail\n" +
+                        "`!jail @User [min]` — Jail user\n" +
+                        "`!unjail @User` — Release\n" +
                         "`!ban @User [Reason]` — Ban user\n" +
                         "`!unban @User` — Unban user")
                     .AddField("🎨 GRADIENT",
-                        "`!gradient <Text> <StartColor> <EndColor>` — Generate gradient text\n")
+                        "`!gradient <Text> <Start> <End>` — Gradient text\n")
                     .AddField("ℹ️ INFORMATION",
-                        "Vortex Coins are virtual server points only.\nThey have no real-world monetary value.\n\n🔧 **VORTEX • Economy & Entertainment**")
+                        "Vortex Coins are virtual points only.\nNo real money value.\n\n🔧 **VORTEX • Economy & Entertainment**")
                     .WithColor(98, 51, 255)
                     .Build();
                 await message.Channel.SendMessageAsync(embed: helpEmbed);
