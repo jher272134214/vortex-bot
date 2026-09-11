@@ -13,7 +13,7 @@ namespace VortexBot
     {
         private const ulong OWNER_ID = 1432638241177075827;
         private const string DATA_FILE = "vortex_data.json";
-        private const long NEW_PLAYER_BALANCE = 100000;
+        private const long NEW_PLAYER_BALANCE = 1000000;
 
         private DiscordSocketClient _client = null!;
         private readonly Random _random = new();
@@ -227,9 +227,6 @@ namespace VortexBot
                 return;
             }
 
-            // ==========================================
-            // 🎮 COINFLIP WITH BET SYSTEM — AYOS NA!
-            // ==========================================
             if (cmd.StartsWith("!coinflip ", StringComparison.OrdinalIgnoreCase))
             {
                 string[] parts = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -238,30 +235,25 @@ namespace VortexBot
                     await message.Channel.SendMessageAsync("⚠️ Usage: `!coinflip heads 100` or `!coinflip tails 500`");
                     return;
                 }
-
                 string choice = parts[1].ToLower();
                 if (choice != "heads" && choice != "tails")
                 {
                     await message.Channel.SendMessageAsync("⚠️ Please choose either **heads** or **tails**!");
                     return;
                 }
-
                 if (!long.TryParse(parts[2], out long betAmount) || betAmount <= 0)
                 {
                     await message.Channel.SendMessageAsync("⚠️ Please enter a valid bet amount! Example: `!coinflip heads 100`");
                     return;
                 }
-
                 long currentBalance = _balances[userId];
                 if (betAmount > currentBalance)
                 {
                     await message.Channel.SendMessageAsync($"❌ Insufficient balance! You only have **{currentBalance:N0}** coins.");
                     return;
                 }
-
                 string result = _random.Next(2) == 0 ? "heads" : "tails";
                 bool won = (choice == result);
-
                 if (won)
                 {
                     _balances[userId] += betAmount;
@@ -327,11 +319,92 @@ namespace VortexBot
                 return;
             }
 
-            if (cmd == "!slots")
+            // ==========================================
+            // 🎰 SLOTS — MAY TAYA AT MULTIPLIER NA!
+            // ==========================================
+            if (cmd.StartsWith("!slots", StringComparison.OrdinalIgnoreCase))
             {
+                string[] p = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                long betAmount = 0;
+                bool hasBet = false;
+
+                // May taya ba? !slots 100
+                if (p.Length >= 2 && long.TryParse(p[1], out long amt) && amt > 0)
+                {
+                    betAmount = amt;
+                    hasBet = true;
+                    long currentBalance = _balances[userId];
+                    if (betAmount > currentBalance)
+                    {
+                        await message.Channel.SendMessageAsync($"❌ Insufficient balance! You only have **{currentBalance:N0}** coins.");
+                        return;
+                    }
+                }
+
                 string[] sym = { "🍒", "🍋", "🍇", "⭐", "💎", "7️⃣" };
-                string a = sym[_random.Next(sym.Length)], b = sym[_random.Next(sym.Length)], c = sym[_random.Next(sym.Length)];
-                string resultText = a == b && b == c ? "🎉 **JACKPOT!**" : (a == b || b == c || a == c) ? "✨ **Nice!**" : "😔 Try again";
+                string a = sym[_random.Next(sym.Length)];
+                string b = sym[_random.Next(sym.Length)];
+                string c = sym[_random.Next(sym.Length)];
+
+                string resultText;
+                long winMultiplier = 0;
+
+                // 3 parehas = JACKPOT
+                if (a == b && b == c)
+                {
+                    // 💎💎💎 = 50x — SOBRANG BIHIRA! (2% chance)
+                    if (a == "💎")
+                    {
+                        winMultiplier = 50;
+                        resultText = "💎💎💎 **MEGA JACKPOT! 50x YOUR BET!** 💎💎💎";
+                    }
+                    // ⭐⭐⭐ = 5x
+                    else if (a == "⭐")
+                    {
+                        winMultiplier = 5;
+                        resultText = "⭐⭐⭐ **BIG WIN! 5x YOUR BET!** ⭐⭐⭐";
+                    }
+                    // Iba = 2x
+                    else
+                    {
+                        winMultiplier = 2;
+                        resultText = $"🎉 **JACKPOT! {winMultiplier}x YOUR BET!** 🎉";
+                    }
+                }
+                // 2 parehas = 1.5x
+                else if (a == b || b == c || a == c)
+                {
+                    winMultiplier = 1; // Balik lang ang taya
+                    resultText = "✨ **2 MATCH! COINS RETURNED!** ✨";
+                }
+                // Wala = TALO
+                else
+                {
+                    winMultiplier = 0;
+                    resultText = "😔 **NO MATCH! BET LOST!** 😔";
+                }
+
+                // Kung may taya
+                if (hasBet)
+                {
+                    long winnings = (long)(betAmount * winMultiplier);
+                    if (winnings > 0)
+                    {
+                        _balances[userId] += winnings;
+                        resultText += $"\n✅ +**{winnings:N0} Coins!**";
+                    }
+                    else
+                    {
+                        _balances[userId] -= betAmount;
+                        resultText += $"\n❌ -**{betAmount:N0} Coins!**";
+                    }
+                    SaveData();
+                }
+                else
+                {
+                    resultText = "🎰 **FREE PLAY — NO BET!**\n" + resultText;
+                }
+
                 await message.Channel.SendMessageAsync($"```\n🎰 [ {a} ] [ {b} ] [ {c} ]\n```{resultText}");
                 return;
             }
@@ -345,7 +418,9 @@ namespace VortexBot
                     "`!dice` — Roll the dice\n" +
                     "`!rps rock/paper/scissors` — Rock Paper Scissors\n" +
                     "`!guess 5` — Guess a number 1-10\n" +
-                    "`!slots` — Free arcade slots"
+                    "`!slots` — Free slots\n" +
+                    "`!slots 100` — Bet 100 coins on slots\n" +
+                    "💎 3x Diamond = 50x | ⭐ 3x Star = 5x | 3x Others = 2x"
                 );
                 return;
             }
@@ -439,6 +514,24 @@ namespace VortexBot
                 return;
             }
 
+            if (cmd.StartsWith("!giveall ", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!IsOwner(userId)) { await message.Channel.SendMessageAsync("❌ **FORBIDDEN** — Owner only!"); return; }
+                string[] p = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (p.Length < 2) { await message.Channel.SendMessageAsync("✅ Usage: `!giveall <amount>`"); return; }
+                if (!long.TryParse(p[1], out long amt) || amt <= 0) { await message.Channel.SendMessageAsync("❌ Invalid amount"); return; }
+
+                int count = 0;
+                foreach (var uid in _balances.Keys.ToList())
+                {
+                    _balances[uid] += amt;
+                    count++;
+                }
+                SaveData();
+                await message.Channel.SendMessageAsync($"👑 **GIVE ALL SUCCESS!**\n💰 +**{amt:N0} Coins** added to **{count} users!**");
+                return;
+            }
+
             if (cmd == "!ping")
             {
                 await message.Channel.SendMessageAsync($"🏓 Pong! Latency: **{_client.Latency}ms**");
@@ -461,14 +554,17 @@ namespace VortexBot
                         "`!dice` — Roll the dice\n" +
                         "`!rps rock/paper/scissors` — Rock Paper Scissors\n" +
                         "`!guess 5` — Guess a number\n" +
-                        "`!slots` — Free arcade slots")
-                    .AddField("🏆 CHALLENGES",
-                        "`!trivia` — Answer trivia questions\n" +
-                        "`!answer a/b/c` — Submit answer\n" +
-                        "`!reaction` — Fast reaction challenge\n" +
-                        "`!arcade` — View arcade games")
-                    .AddField("👑 OWNER / MODERATION",
-                        "`!give @User <amount>` — Give virtual coins\n" +
+                        "`!slots` — Free slots\n" +
+                        "`!slots 100` — Bet coins on slots")
+                    .AddField("🎰 SLOTS PRIZES",
+                        "`3x 🍒🍋🍇` = **2x** your bet\n" +
+                        "`3x ⭐⭐⭐` = **5x** your bet\n" +
+                        "`3x 💎💎💎` = **50x** your bet (RARE!)\n" +
+                        "`2 match` = **Return bet**\n" +
+                        "`No match` = **Lose bet**")
+                    .AddField("👑 OWNER COMMANDS",
+                        "`!give @User <amount>` — Give coins to a player\n" +
+                        "`!giveall <amount>` — Give coins to ALL players\n" +
                         "`!kick @User [Reason]` — Kick user\n" +
                         "`!jail @User [minutes]` — Jail user\n" +
                         "`!unjail @User` — Release from jail\n" +
