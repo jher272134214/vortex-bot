@@ -14,7 +14,7 @@ namespace VortexBot
         private const ulong OWNER_ID = 1432638241177075827;
         private const string DATA_FILE = "vortex_data.json";
         private const long NEW_PLAYER_BALANCE = 1000000;
-        private const int COMMAND_COOLDOWN_SECONDS = 20; // ⏳ 20 SECOND COOLDOWN
+        private const int COMMAND_COOLDOWN_SECONDS = 20;
 
         private DiscordSocketClient _client = null!;
         private readonly Random _random = new();
@@ -22,7 +22,7 @@ namespace VortexBot
         private readonly Dictionary<ulong, DateTime> _dailyCooldown = new();
         private readonly Dictionary<ulong, DateTime> _workCooldown = new();
         private readonly Dictionary<ulong, DateTime> _jailedUsers = new();
-        private readonly Dictionary<ulong, DateTime> _userCooldown = new(); // ⏳ COOLDOWN STORAGE
+        private readonly Dictionary<ulong, DateTime> _userCooldown = new();
 
         private class BotData
         {
@@ -124,15 +124,14 @@ namespace VortexBot
 
         private bool IsOwner(ulong userId) => userId == OWNER_ID;
 
-        // ⏳ CHECK COOLDOWN — RETURN TRUE IF CAN USE
-        private bool CheckCooldown(ulong userId, out TimeSpan remaining)
+        private bool CheckCooldown(ulong userId, out TimeSpan cooldownRem)
         {
-            remaining = TimeSpan.Zero;
-            if (IsOwner(userId)) return true; // OWNER WALANG COOLDOWN!
-            if (_userCooldown.TryGetValue(userId, out var last))
+            cooldownRem = TimeSpan.Zero;
+            if (IsOwner(userId)) return true;
+            if (_userCooldown.TryGetValue(userId, out var lastUsed))
             {
-                remaining = DateTime.UtcNow.AddSeconds(COMMAND_COOLDOWN_SECONDS) - DateTime.UtcNow;
-                if (remaining.TotalSeconds > 0) return false;
+                cooldownRem = lastUsed.AddSeconds(COMMAND_COOLDOWN_SECONDS) - DateTime.UtcNow;
+                if (cooldownRem.TotalSeconds > 0) return false;
             }
             _userCooldown[userId] = DateTime.UtcNow;
             return true;
@@ -146,10 +145,9 @@ namespace VortexBot
             ulong userId = message.Author.Id;
             EnsureAccount(userId);
 
-            // ⏳ CHECK 20s COOLDOWN SA LAHAT NG COMMANDS
-            if (!CheckCooldown(userId, out TimeSpan rem))
+            if (!CheckCooldown(userId, out TimeSpan cooldownRem))
             {
-                await message.Channel.SendMessageAsync($"⏳ **Cooldown!** Maghintay ng **{rem.Seconds} segundo** bago makagamit ulit!");
+                await message.Channel.SendMessageAsync($"⏳ **Cooldown!** Maghintay ng **{cooldownRem.Seconds} segundo** bago makagamit ulit!");
                 return;
             }
 
@@ -204,10 +202,10 @@ namespace VortexBot
             if (cmd == "!daily")
             {
                 var now = DateTime.UtcNow;
-                if (_dailyCooldown.TryGetValue(userId, out var last) && (now - last).TotalHours < 24)
+                if (_dailyCooldown.TryGetValue(userId, out var dailyLast) && (now - dailyLast).TotalHours < 24)
                 {
-                    var rem = TimeSpan.FromHours(24) - (now - last);
-                    await message.Channel.SendMessageAsync($"⏳ Come back in **{rem.Hours}h {rem.Minutes}m**");
+                    var timeRem = TimeSpan.FromHours(24) - (now - dailyLast);
+                    await message.Channel.SendMessageAsync($"⏳ Come back in **{timeRem.Hours}h {timeRem.Minutes}m**");
                     return;
                 }
                 int reward = _random.Next(500, 1001);
@@ -221,10 +219,10 @@ namespace VortexBot
             if (cmd == "!work")
             {
                 var now = DateTime.UtcNow;
-                if (_workCooldown.TryGetValue(userId, out var last) && (now - last).TotalMinutes < 5)
+                if (_workCooldown.TryGetValue(userId, out var workLast) && (now - workLast).TotalMinutes < 5)
                 {
-                    var rem = TimeSpan.FromMinutes(5) - (now - last);
-                    await message.Channel.SendMessageAsync($"⏳ Cooldown: **{rem.Seconds}s**");
+                    var workRem = TimeSpan.FromMinutes(5) - (now - workLast);
+                    await message.Channel.SendMessageAsync($"⏳ Cooldown: **{workRem.Seconds}s**");
                     return;
                 }
                 string[] jobs = { "Coded new features", "Maintained servers", "Inspected engines", "Secured perimeter", "Calibrated systems" };
@@ -317,12 +315,12 @@ namespace VortexBot
                 string bot = choices[_random.Next(3)];
                 string emojiP = player == "rock" ? "🪨" : player == "paper" ? "📄" : "✂️";
                 string emojiB = bot == "rock" ? "🪨" : bot == "paper" ? "📄" : "✂️";
-                string result;
-                if (player == bot) result = "🤝 **IT'S A TIE!**";
+                string outcome;
+                if (player == bot) outcome = "🤝 **IT'S A TIE!**";
                 else if ((player == "rock" && bot == "scissors") || (player == "paper" && bot == "rock") || (player == "scissors" && bot == "paper"))
-                    result = "🎉 **YOU WIN!**";
-                else result = "😔 **YOU LOST!**";
-                await message.Channel.SendMessageAsync($"{emojiP} You: **{player.ToUpper()}** vs {emojiB} Bot: **{bot.ToUpper()}**\n{result}");
+                    outcome = "🎉 **YOU WIN!**";
+                else outcome = "😔 **YOU LOST!**";
+                await message.Channel.SendMessageAsync($"{emojiP} You: **{player.ToUpper()}** vs {emojiB} Bot: **{bot.ToUpper()}**\n{outcome}");
                 return;
             }
 
@@ -342,9 +340,6 @@ namespace VortexBot
                 return;
             }
 
-            // ==========================================
-            // 🎰 SLOTS — SOBRANG DALI NA MANALO!
-            // ==========================================
             if (cmd.StartsWith("!slots", StringComparison.OrdinalIgnoreCase))
             {
                 string[] p = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -363,21 +358,18 @@ namespace VortexBot
                     }
                 }
 
-                // ✅✅✅ SOBRANG DALI NA! 85% CHANCE GAMITIN ANG MADALING SIMBOLO!
                 string[] common = { "🍒", "🍒", "🍒", "🍒", "🍋", "🍋", "🍋", "🍋", "🍇", "🍇", "7️⃣", "7️⃣" };
                 string rare5x = "⭐";
                 string jackpot50x = "💎";
 
                 string a, b, c;
 
-                // ✅ 85% = PURE COMMON — SOBRANG DALI MA-TATLO PAREHAS!
                 if (_random.NextDouble() < 0.85)
                 {
                     a = common[_random.Next(common.Length)];
                     b = common[_random.Next(common.Length)];
                     c = common[_random.Next(common.Length)];
                 }
-                // ⭐ 12% = MAY STAR
                 else if (_random.NextDouble() < 0.97)
                 {
                     string[] mixed = { "🍒", "🍋", "🍇", "7️⃣", rare5x };
@@ -385,7 +377,6 @@ namespace VortexBot
                     b = mixed[_random.Next(mixed.Length)];
                     c = mixed[_random.Next(mixed.Length)];
                 }
-                // 💎 3% = DIAMOND — SOBRA ANG BIHIRA!
                 else
                 {
                     string[] mixed = { "🍒", "🍋", "🍇", "7️⃣", rare5x, jackpot50x };
@@ -397,7 +388,6 @@ namespace VortexBot
                 string resultText;
                 long winMultiplier = 0;
 
-                // 3 PAREHAS = PANALO!
                 if (a == b && b == c)
                 {
                     if (a == jackpot50x)
@@ -416,13 +406,11 @@ namespace VortexBot
                         resultText = $"🎉 **JACKPOT! 2x YOUR BET!** 🎉";
                     }
                 }
-                // 2 PAREHAS = BALIK TAYA
                 else if (a == b || b == c || a == c)
                 {
                     winMultiplier = 1;
                     resultText = "✨ **2 MATCH! COINS RETURNED!** ✨";
                 }
-                // WALA = TALO
                 else
                 {
                     winMultiplier = 0;
