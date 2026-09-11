@@ -1,24 +1,31 @@
 using Discord;
 using Discord.WebSocket;
+using Discord.Commands;
+using Microsoft.Extensions.DependencyInjection;
+using Discord.Net;
 using System;
+using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Linq;
 using System.Net;
-using System.Threading.Tasks;
+using System.Net.Http;
 
 namespace VortexBot
 {
     class Program
     {
+        private DiscordSocketClient _client;
+        private CommandService _commands;
+        private IServiceProvider _services;
+
         private const ulong OWNER_ID = 1432638241177075827;
         private const string DATA_FILE = "vortex_data.json";
         private const long NEW_USER_BALANCE = 1000000;
         private const int COMMAND_COOLDOWN_SECONDS = 20;
         private const int PORT = 10000;
 
-        private DiscordSocketClient _client;
         private Dictionary<ulong, long> _balances = new();
         private Dictionary<ulong, DateTime> _dailyCooldown = new();
         private Dictionary<ulong, DateTime> _workCooldown = new();
@@ -41,19 +48,34 @@ namespace VortexBot
             };
 
             _client = new DiscordSocketClient(config);
+            _commands = new CommandService();
+
+            _services = new ServiceCollection()
+                .AddSingleton(_client)
+                .AddSingleton(_commands)
+                .BuildServiceProvider();
+
             string token = Environment.GetEnvironmentVariable("DISCORD_TOKEN");
             if (string.IsNullOrWhiteSpace(token))
             {
-                Console.WriteLine("❌ DISCORD_TOKEN not set!");
+                Console.WriteLine("❌ DISCORD_TOKEN environment variable not set!");
                 return;
             }
 
             _client.Log += LogAsync;
-            _client.Ready += ReadyAsync;
             _client.MessageReceived += MessageReceivedAsync;
+            _client.Ready += ReadyAsync;
 
-            try { await _client.LoginAsync(TokenType.Bot, token); await _client.StartAsync(); }
-            catch { Console.WriteLine("❌ Login failed!"); return; }
+            try
+            {
+                await _client.LoginAsync(TokenType.Bot, token);
+                await _client.StartAsync();
+            }
+            catch (HttpException ex)
+            {
+                Console.WriteLine($"❌ Login Error: {ex.Message}");
+                return;
+            }
 
             await Task.Delay(-1);
         }
@@ -65,6 +87,8 @@ namespace VortexBot
                 var listener = new HttpListener();
                 listener.Prefixes.Add($"http://+:{PORT}/");
                 listener.Start();
+                Console.WriteLine($"✅ Web server listening on port {PORT}");
+
                 Task.Run(async () =>
                 {
                     while (listener.IsListening)
@@ -72,43 +96,71 @@ namespace VortexBot
                         try
                         {
                             var ctx = await listener.GetContextAsync();
-                            var res = ctx.Response;
-                            byte[] buf = System.Text.Encoding.UTF8.GetBytes("Vortex Bot Running!");
-                            res.ContentLength64 = buf.Length;
-                            await res.OutputStream.WriteAsync(buf, 0, buf.Length);
-                            res.Close();
-                        } catch { }
+                            var response = ctx.Response;
+                            string text = "Vortex Bot is running!";
+                            byte[] buffer = System.Text.Encoding.UTF8.GetBytes(text);
+                            response.ContentLength64 = buffer.Length;
+                            await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
+                            response.Close();
+                        }
+                        catch { }
                     }
                 });
-            } catch { }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"⚠️ Port server warning: {ex.Message}");
+            }
         }
 
-        private Task LogAsync(LogMessage msg) { Console.WriteLine(msg); return Task.CompletedTask; }
-        private Task ReadyAsync() { Console.WriteLine("✅ VORTEX BOT ONLINE!"); return Task.CompletedTask; }
+        private Task LogAsync(LogMessage msg)
+        {
+            Console.WriteLine(msg.ToString());
+            return Task.CompletedTask;
+        }
+
+        private Task ReadyAsync()
+        {
+            Console.WriteLine("✅ VORTEX BOT ONLINE & READY!");
+            return Task.CompletedTask;
+        }
 
         private bool IsOwner(ulong userId) => userId == OWNER_ID;
-        private bool CheckCooldown(ulong userId, out TimeSpan rem)
+
+        private bool CheckCooldown(ulong userId, out TimeSpan cooldownRem)
         {
-            rem = TimeSpan.Zero;
+            cooldownRem = TimeSpan.Zero;
             if (IsOwner(userId)) return true;
-            if (_userCooldown.TryGetValue(userId, out var last))
+            if (_userCooldown.TryGetValue(userId, out var lastUsed))
             {
-                rem = last.AddSeconds(COMMAND_COOLDOWN_SECONDS) - DateTime.UtcNow;
-                if (rem.TotalSeconds > 0) return false;
+                cooldownRem = lastUsed.AddSeconds(COMMAND_COOLDOWN_SECONDS) - DateTime.UtcNow;
+                if (cooldownRem.TotalSeconds > 0) return false;
             }
             _userCooldown[userId] = DateTime.UtcNow;
             return true;
         }
 
-        private void EnsureUser(ulong userId) { if (!_balances.ContainsKey(userId)) _balances[userId] = NEW_USER_BALANCE; }
+        private void EnsureUser(ulong userId)
+        {
+            if (!_balances.ContainsKey(userId))
+                _balances[userId] = NEW_USER_BALANCE;
+        }
 
         private void SaveData()
         {
             try
             {
-                var data = new BotData { Balances = _balances, DailyCooldown = _dailyCooldown, WorkCooldown = _workCooldown, JailedUntil = _jailedUntil };
-                File.WriteAllText(DATA_FILE, JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true }));
-            } catch { }
+                var data = new BotData
+                {
+                    Balances = _balances,
+                    DailyCooldown = _dailyCooldown,
+                    WorkCooldown = _workCooldown,
+                    JailedUntil = _jailedUntil
+                };
+                string json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(DATA_FILE, json);
+            }
+            catch (Exception ex) { Console.WriteLine($"Save Error: {ex.Message}"); }
         }
 
         private void LoadData()
@@ -116,137 +168,189 @@ namespace VortexBot
             try
             {
                 if (!File.Exists(DATA_FILE)) return;
-                var d = JsonSerializer.Deserialize<BotData>(File.ReadAllText(DATA_FILE));
-                if (d != null) { _balances = d.Balances ?? new(); _dailyCooldown = d.DailyCooldown ?? new(); _workCooldown = d.WorkCooldown ?? new(); _jailedUntil = d.JailedUntil ?? new(); }
-            } catch { _balances = new(); }
+                string json = File.ReadAllText(DATA_FILE);
+                var data = JsonSerializer.Deserialize<BotData>(json);
+                if (data != null)
+                {
+                    _balances = data.Balances ?? new();
+                    _dailyCooldown = data.DailyCooldown ?? new();
+                    _workCooldown = data.WorkCooldown ?? new();
+                    _jailedUntil = data.JailedUntil ?? new();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Load Error: {ex.Message}");
+                _balances = new();
+            }
         }
 
         private async Task MessageReceivedAsync(SocketMessage msg)
         {
-            var u = msg as SocketUserMessage;
-            if (u == null || u.Content.Length < 2 || msg.Author.IsBot) return;
+            var userMsg = msg as SocketUserMessage;
+            if (userMsg == null || userMsg.Content.Length < 2 || msg.Author.IsBot) return;
+
             ulong userId = msg.Author.Id;
             EnsureUser(userId);
 
-            if (_jailedUntil.TryGetValue(userId, out var release) && DateTime.UtcNow < release) return;
+            if (_jailedUntil.TryGetValue(userId, out var releaseTime) && DateTime.UtcNow < releaseTime)
+                return;
 
-            string[] args = u.Content.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            string cmd = args[0].ToLower();
+            string cmd = userMsg.Content.Trim().ToLower();
+            string[] args = userMsg.Content.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            string cmdName = args.Length > 0 ? args[0].ToLower() : "";
 
-            if (!CheckCooldown(userId, out var cdRem))
+            if (!CheckCooldown(userId, out TimeSpan cooldownRem))
             {
-                await msg.Channel.SendMessageAsync($"⏳ Maghintay ng **{(int)cdRem.TotalSeconds} segundo**!");
+                await msg.Channel.SendMessageAsync($"⏳ **Cooldown!** Maghintay ng **{(int)cooldownRem.TotalSeconds} segundo** bago makagamit ulit!");
                 return;
             }
 
-            if (cmd == "!balance" || cmd == "!bal")
+            if (cmdName == "!balance" || cmdName == "!bal")
             {
-                await msg.Channel.SendMessageAsync($"💰 Balanse: **{_balances[userId]:N0} Coins**");
+                await msg.Channel.SendMessageAsync($"💰 <@{userId}> Balance: **{_balances[userId]:N0} Coins**");
                 return;
             }
 
-            if (cmd == "!daily")
+            if (cmdName == "!daily")
             {
-                if (_dailyCooldown.TryGetValue(userId, out var dLast) && (DateTime.UtcNow - dLast).TotalHours < 24)
+                if (_dailyCooldown.TryGetValue(userId, out var dailyLast) && (DateTime.UtcNow - dailyLast).TotalHours < 24)
                 {
-                    var tRem = TimeSpan.FromHours(24) - (DateTime.UtcNow - dLast);
-                    await msg.Channel.SendMessageAsync($"⏳ Bumalik ka pagkalipas ng **{tRem.Hours}h {tRem.Minutes}m**!");
+                    var timeRem = TimeSpan.FromHours(24) - (DateTime.UtcNow - dailyLast);
+                    await msg.Channel.SendMessageAsync($"⏳ Bumalik ka pagkalipas ng **{timeRem.Hours} oras at {timeRem.Minutes} minuto**!");
                     return;
                 }
                 int reward = new Random().Next(500, 1001);
                 _balances[userId] += reward;
                 _dailyCooldown[userId] = DateTime.UtcNow;
                 SaveData();
-                await msg.Channel.SendMessageAsync($"🎁 Claimed! +**{reward:N0} Coins!**");
+                await msg.Channel.SendMessageAsync($"🎁 Claimed! +**{reward:N0} Coins**! Balanse: **{_balances[userId]:N0}**");
                 return;
             }
 
-            if (cmd == "!work")
+            if (cmdName == "!work")
             {
-                if (_workCooldown.TryGetValue(userId, out var wLast) && (DateTime.UtcNow - wLast).TotalMinutes < 5)
+                if (_workCooldown.TryGetValue(userId, out var workLast) && (DateTime.UtcNow - workLast).TotalMinutes < 5)
                 {
-                    var wRem = TimeSpan.FromMinutes(5) - (DateTime.UtcNow - wLast);
-                    await msg.Channel.SendMessageAsync($"⏳ Maghintay ng **{wRem.Seconds}s**!");
+                    var workRem = TimeSpan.FromMinutes(5) - (DateTime.UtcNow - workLast);
+                    await msg.Channel.SendMessageAsync($"⏳ Magpahinga ka muna! **{workRem.Seconds} segundo** na lang!");
                     return;
                 }
                 string[] jobs = { "Nag-code", "Nag-maintain ng server", "Nag-ayos ng makina", "Nagbantay ng perimeter", "Nag-calibrate ng sistema" };
-                int earn = new Random().Next(100, 401);
-                _balances[userId] += earn;
+                int earnings = new Random().Next(100, 401);
+                _balances[userId] += earnings;
                 _workCooldown[userId] = DateTime.UtcNow;
                 SaveData();
-                await msg.Channel.SendMessageAsync($"🛠️ {jobs[new Random().Next(jobs.Length)]}! +**{earn:N0} Coins!**");
+                await msg.Channel.SendMessageAsync($"🛠️ {jobs[new Random().Next(jobs.Length)]} ka! +**{earnings:N0} Coins**! Balanse: **{_balances[userId]:N0}**");
                 return;
             }
 
-            if (cmd == "!lb" || cmd == "!leaderboard")
+            if (cmdName == "!lb" || cmdName == "!leaderboard")
             {
                 var top10 = _balances.OrderByDescending(x => x.Value).Take(10).ToList();
                 string text = "🏆 **TOP 10 RICHEST**\n";
-                int r = 1;
-                foreach (var x in top10)
+                int rank = 1;
+                foreach (var entry in top10)
                 {
-                    string m = r == 1 ? "🥇" : r == 2 ? "🥈" : r == 3 ? "🥉" : "🏅";
-                    text += $"{m} <@{x.Key}> — **{x.Value:N0} Coins**\n"; r++;
+                    string medal = rank switch { 1 => "🥇", 2 => "🥈", 3 => "🥉", _ => "🏅" };
+                    text += $"{medal} #{rank}: <@{entry.Key}> — **{entry.Value:N0} Coins**\n";
+                    rank++;
                 }
                 await msg.Channel.SendMessageAsync(text);
                 return;
             }
 
-            if (cmd == "!slots")
+            if (cmdName == "!slots")
             {
                 long bet = args.Length >= 2 && long.TryParse(args[1], out long b) && b > 0 ? b : 0;
-                if (bet > _balances[userId]) { await msg.Channel.SendMessageAsync("❌ Kulang ang pera mo!"); return; }
+                if (bet > _balances[userId])
+                {
+                    await msg.Channel.SendMessageAsync("❌ Kulang ang pera mo!");
+                    return;
+                }
 
                 string[] common = { "🍒", "🍒", "🍒", "🍒", "🍋", "🍋", "🍋", "🍋", "🍇", "🍇", "7️⃣", "7️⃣" };
-                string star = "⭐", diamond = "💎";
+                string star = "⭐";
+                string diamond = "💎";
+
                 string a, symB, c;
                 double roll = new Random().NextDouble();
 
-                // ✅ 50% = Panalo / Triple Common
-                if (roll < 0.50)
+                // ✅ 40% TALO | 40% PANALO | 15% ⭐5x | 5% 💎50x
+                if (roll < 0.40)
                 {
+                    // ❌ 40% CHANCE: TALO — WALANG KAPAREHAS
+                    string[] loseSymbols = { "🍒", "🍋", "🍇", "7️⃣" };
+                    do
+                    {
+                        a = loseSymbols[new Random().Next(loseSymbols.Length)];
+                        symB = loseSymbols[new Random().Next(loseSymbols.Length)];
+                        c = loseSymbols[new Random().Next(loseSymbols.Length)];
+                    } while (a == symB || symB == c || a == c);
+                }
+                else if (roll < 0.80)
+                {
+                    // ✅ 40% CHANCE: PANALO — TRIPLE COMMON
                     int idx = new Random().Next(common.Length);
                     a = common[idx]; symB = common[idx]; c = common[idx];
                 }
-                // ⭐ 30% = Triple Star
-                else if (roll < 0.80) { a = star; symB = star; c = star; }
-                // 💎 20% = Triple Diamond
-                else { a = diamond; symB = diamond; c = diamond; }
+                else if (roll < 0.95)
+                {
+                    // ⭐ 15% CHANCE: TRIPLE STAR
+                    a = star; symB = star; c = star;
+                }
+                else
+                {
+                    // 💎 5% CHANCE: TRIPLE DIAMOND
+                    a = diamond; symB = diamond; c = diamond;
+                }
 
-                string resText; long mul = 0;
+                string resultText;
+                long multiplier = 0;
+
                 if (a == symB && symB == c)
                 {
-                    if (a == diamond) { mul = 50; resText = "💎💎💎 **MEGA JACKPOT! 50x PANALO!** 💎💎💎"; }
-                    else if (a == star) { mul = 5; resText = "⭐⭐⭐ **BIG WIN! 5x PANALO!** ⭐⭐⭐"; }
-                    else { mul = 2; resText = $"🎉 **JACKPOT! 2x PANALO!** {a}{a}{a}"; }
+                    if (a == diamond) { multiplier = 50; resultText = "💎💎💎 **MEGA JACKPOT! 50x PANALO!** 💎💎💎"; }
+                    else if (a == star) { multiplier = 5; resultText = "⭐⭐⭐ **BIG WIN! 5x PANALO!** ⭐⭐⭐"; }
+                    else { multiplier = 2; resultText = $"🎉 **JACKPOT! 2x PANALO!** {a}{a}{a}"; }
                 }
-                else if (a == symB || symB == c || a == c) { mul = 1; resText = "✨ **PARES! BALIK ANG TAYA!** ✨"; }
-                else { mul = 0; resText = "😔 **WALA. SUBOK ULIT!** 😔"; }
+                else if (a == symB || symB == c || a == c)
+                {
+                    multiplier = 1; resultText = "✨ **PARES! BALIK ANG TAYA!** ✨";
+                }
+                else
+                {
+                    multiplier = 0; resultText = "😔 **WALA. SUBOK ULIT!** 😔";
+                }
 
-                long win = bet * mul;
-                _balances[userId] = _balances[userId] - bet + win;
+                long winAmt = bet * multiplier;
+                _balances[userId] = _balances[userId] - bet + winAmt;
                 SaveData();
-                await msg.Channel.SendMessageAsync($"```\n🎰 [ {a} ] [ {symB} ] [ {c} ]\n```\n{resText}\n✅ Kita: **{win:N0} Coins** | Balanse: **{_balances[userId]:N0}**");
+
+                await msg.Channel.SendMessageAsync($"```\n🎰 [ {a} ] [ {symB} ] [ {c} ]\n```\n{resultText}\n✅ Kita: **{winAmt:N0} Coins** | Balanse: **{_balances[userId]:N0}**");
                 return;
             }
 
             if (IsOwner(userId))
             {
-                if (cmd == "!give" && args.Length >= 3 && ulong.TryParse(args[1].Replace("<@!", "").Replace(">", "").Replace("!", ""), out ulong tid) && long.TryParse(args[2], out long amt))
+                if (cmdName == "!give" && args.Length >= 3 && ulong.TryParse(args[1].Replace("<@!", "").Replace(">", "").Replace("!", ""), out ulong targetId) && long.TryParse(args[2], out long giveAmt))
                 {
-                    EnsureUser(tid); _balances[tid] += amt; SaveData();
-                    await msg.Channel.SendMessageAsync($"👑 Ibinigay ang **{amt:N0} Coins** kay <@{tid}>!");
+                    EnsureUser(targetId);
+                    _balances[targetId] += giveAmt;
+                    SaveData();
+                    await msg.Channel.SendMessageAsync($"👑 Ibinigay ang **{giveAmt:N0} Coins** kay <@{targetId}>!");
                     return;
                 }
-                if (cmd == "!jail" && args.Length >= 3 && ulong.TryParse(args[1].Replace("<@!", "").Replace(">", "").Replace("!", ""), out ulong jid) && int.TryParse(args[2], out int min))
+
+                if (cmdName == "!jail" && args.Length >= 3 && ulong.TryParse(args[1].Replace("<@!", "").Replace(">", "").Replace("!", ""), out ulong jailId) && int.TryParse(args[2], out int min))
                 {
-                    _jailedUntil[jid] = DateTime.UtcNow.AddMinutes(min); SaveData();
-                    await msg.Channel.SendMessageAsync($"⛓️ <@{jid}> nakulong ng **{min} minuto**!");
+                    _jailedUntil[jailId] = DateTime.UtcNow.AddMinutes(min);
+                    await msg.Channel.SendMessageAsync($"⛓️ <@{jailId}> ay nakulong ng **{min} minuto**!");
                     return;
                 }
             }
 
-            if (cmd == "!help")
+            if (cmdName == "!help")
             {
                 await msg.Channel.SendMessageAsync(@"
 🏠 **VORTEX BOT COMMANDS**
@@ -256,7 +360,7 @@ namespace VortexBot
 🎰 `!slots [halaga]` — Subukan ang suwerte
 🏆 `!lb / !leaderboard` — Tingnan ang mayayaman
 ⏳ Lahat ng command: 20 segundong paghihintay
-🎰 Slots: 50% Panalo | 30% ⭐5x | 20% 💎50x
+🎰 Slots: ❌40% Talo | ✅40% Panalo | ⭐15% 5x | 💎5% 50x
 ");
                 return;
             }
